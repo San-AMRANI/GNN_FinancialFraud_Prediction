@@ -1,0 +1,10 @@
+transaction_id,user_id,merchant_id,amount,transaction_type
+32,4,110,80,transfer
+33,4,111,700,purchase
+34,4,101,50,purchase
+35,4,102,250,transfer
+36,4,103,100,purchase
+37,4,104,300,transfer
+38,4,105,150,purchase
+39,4,106,400,purchase
+40,4,107,100,transfer

@@ -37,24 +37,20 @@ def train(data, model, optimizer):
     optimizer.step()
     return loss.item()
 
-# Function to get the top-k potential fraudulent transactions
-def get_top_links(model, data, top_k=3):
+# Function to get the predictions for a new graph
+def predict(model, data):
     model.eval()
     with torch.no_grad():
         out = model(data)
-
+    
     # Get embeddings for each edge (user-merchant)
     edge_index = data.edge_index
     edge_embeddings = out[edge_index[0]] * out[edge_index[1]]  # Element-wise multiplication of node features
     
-    # Get the scores for each link (dot product)
-    scores = edge_embeddings.squeeze()
-    top_k_indices = scores.topk(top_k).indices
-
-    # Extract the corresponding node pairs for the top K links
-    top_k_node_pairs = edge_index[:, top_k_indices]
+    # Get the predicted probabilities for each link
+    predictions = torch.sigmoid(edge_embeddings).squeeze()
     
-    return top_k_node_pairs
+    return predictions
 
 # Load the graph data from a CSV file
 def load_graph_data(file_path):
@@ -73,11 +69,9 @@ def load_graph_data(file_path):
 
     return Data(x=x, edge_index=edge_index, y=y), df  # Return df as well
 
-# Define the file path to the CSV
-file_path = 'graph_data.csv'
-
-# Load the graph data from the CSV file
-data, df = load_graph_data(file_path)
+# Load the graph data from the training CSV file (graph_data.csv)
+train_file_path = 'graph_data.csv'
+data, df_train = load_graph_data(train_file_path)
 
 # Initialize the model, optimizer, and training settings
 input_dim = 1  # 1 feature per node
@@ -93,29 +87,86 @@ for epoch in range(100):
     if epoch % 10 == 0:
         print(f"Epoch {epoch}: Loss = {loss:.4f}")
 
-# Get and display top 3 potential fraudulent transactions
-top_k_node_pairs = get_top_links(model, data, top_k=3)
+# Load the new graph data from the CSV file (new_graph_data.csv)
+new_file_path = 'new_graph_data.csv'
+df_new = pd.read_csv(new_file_path)
 
-print("Top 3 potential fraudulent transactions (user, merchant):")
-print(top_k_node_pairs)
-# Visualize the graph using networkx and matplotlib
-G = nx.Graph()
+# Create the edge_index for the new graph (user_id, merchant_id)
+edge_index_new = torch.tensor([df_new['user_id'].values, df_new['merchant_id'].values], dtype=torch.long)
+
+# Feature matrix for the new graph (same as before, 1 feature per node)
+num_nodes_new = df_new[['user_id', 'merchant_id']].values.max() + 1  # Find the max node index to determine number of nodes
+x_new = torch.ones((num_nodes_new, 1), dtype=torch.float)
+
+# Prepare the data object for the new graph
+data_new = Data(x=x_new, edge_index=edge_index_new)
+
+# Get predictions for the new graph
+predictions = predict(model, data_new)
+
+# Add the predictions to the DataFrame
+df_new['prediction_prob'] = predictions.numpy()  # Add predicted probabilities to DataFrame
+df_new['is_fraudulent'] = predictions.numpy() > 0.5  # Threshold the probabilities (0.5 for fraud detection)
+
+# Calculate the percentage of fraudulent predictions
+fraud_percentage = df_new['is_fraudulent'].mean() * 100
+
+# Print the complete version of new_graph_data with the 'is_fraudulent' and 'prediction_prob' columns
+print(df_new)
+
+# Print the percentage of fraudulent predictions
+print(f"Percentage of fraudulent predictions: {fraud_percentage:.2f}%")
+
+# --- Visualizing the original graph_data ---
+G_train = nx.Graph()
 
 # Add edges to the graph (only relationships, no isolated nodes)
 for i in range(data.edge_index.shape[1]):
     user_id = data.edge_index[0][i].item()
     merchant_id = data.edge_index[1][i].item()
-    G.add_edge(user_id, merchant_id)
+    G_train.add_edge(user_id, merchant_id)
 
-# Draw the graph
-pos = nx.spring_layout(G)  # Layout for visualization
+# Draw the graph for graph_data (original)
 plt.figure(figsize=(8, 8))
+pos_train = nx.spring_layout(G_train)  # Layout for visualization
+edge_colors_train = ['red' if df_train['is_fraudulent'][i] == 1 else 'gray' for i in range(df_train.shape[0])]
 
-# Color edges based on fraudulent transactions
-edge_colors = ['red' if df['is_fraudulent'][i] == 1 else 'gray' for i in range(df.shape[0])]
+# Separate users and merchants
+user_nodes_train = set(df_train['user_id'].values)
+merchant_nodes_train = set(df_train['merchant_id'].values)
 
-# Draw the graph with custom edge colors, node_size and color
-nx.draw(G, pos, with_labels=True, node_size=500, node_color="skyblue", font_size=16, font_weight="bold", edge_color=edge_colors)
+# Assign node colors and sizes
+node_colors_train = ['lightblue' if node in user_nodes_train else 'orange' for node in G_train.nodes()]
+node_sizes_train = [500 if node in user_nodes_train else 700 for node in G_train.nodes()]
 
-plt.title("Transaction Network Visualization (Fraudulent Transactions Highlighted)")
+# Draw the graph for the original graph data
+nx.draw(G_train, pos_train, with_labels=True, node_size=node_sizes_train, node_color=node_colors_train, font_size=16, font_weight="bold", edge_color=edge_colors_train)
+plt.title("Original Transaction Network (graph_data.csv)")
+plt.show()
+
+# --- Visualizing the new graph_data (after prediction) ---
+G_new = nx.Graph()
+
+# Add edges to the graph (only relationships, no isolated nodes)
+for i in range(data_new.edge_index.shape[1]):
+    user_id = data_new.edge_index[0][i].item()
+    merchant_id = data_new.edge_index[1][i].item()
+    G_new.add_edge(user_id, merchant_id)
+
+# Draw the graph for new_graph_data (after prediction)
+plt.figure(figsize=(8, 8))
+pos_new = nx.spring_layout(G_new)  # Layout for visualization
+edge_colors_new = ['red' if df_new['is_fraudulent'][i] == 1 else 'gray' for i in range(df_new.shape[0])]
+
+# Separate users and merchants
+user_nodes_new = set(df_new['user_id'].values)
+merchant_nodes_new = set(df_new['merchant_id'].values)
+
+# Assign node colors and sizes
+node_colors_new = ['lightblue' if node in user_nodes_new else 'orange' for node in G_new.nodes()]
+node_sizes_new = [500 if node in user_nodes_new else 700 for node in G_new.nodes()]
+
+# Draw the graph for the predicted graph data
+nx.draw(G_new, pos_new, with_labels=True, node_size=node_sizes_new, node_color=node_colors_new, font_size=16, font_weight="bold", edge_color=edge_colors_new)
+plt.title("Predicted Transaction Network (new_graph_data.csv after prediction)")
 plt.show()
