@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload File</title>
+</head>
+<body>
+    <h2>File Upload Form</h2>
+    
+    <form id="fileUploadForm" action="http://localhost:6541/registred-user/project/file/upload" method="POST" enctype="multipart/form-data">
+        <!-- File Input -->
+        <label for="fileInput">Choose a file:</label>
+        <input type="file" id="fileInput" name="file" required />
+        
+        <br><br>
+
+        <!-- Folder ID Input (or hidden if you want it passed automatically) -->
+        <label for="folderId">Folder ID:</label>
+        <input type="number" id="folderId" name="folderId" value="1" required />
+
+        <br><br>
+
+        <!-- Submit Button -->
+        <button type="submit">Upload File</button>
+    </form>
+
+    <script>
+        // Add Bearer Token to the request headers via JavaScript if needed
+        document.getElementById('fileUploadForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            // Get the form data
+            const formData = new FormData(this);
+            
+            // Add the Authorization header with the Bearer token
+            const token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbXJhbmloYXNzYW4yMDAzQGdtYWlsLmNvbSIsImlhdCI6MTczNjYxMjExMywiZXhwIjoxNzM2Njk4NTEzfQ.S2olmXHWkSUKFmYfxC7wqrZsAlwAFFBW5qD03b15iPo"; // Replace with the actual token
+            const headers = new Headers();
+            headers.append("Authorization", "Bearer " + token);
+
+            // Send the form data to the server with fetch API
+            fetch('http://localhost:6541/registred-user/project/file/upload', {
+                method: 'POST',
+                headers: headers,
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Success:', data);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        });
+    </script>
+</body>
+</html>
